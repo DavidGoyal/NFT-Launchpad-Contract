@@ -3,13 +3,13 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 
-import "src/Contract.sol";
+import "src/Launchpad.sol";
 
 contract TestContract is Test {
-    HypurrBlades c;
+    Launchpad c;
 
     function setUp() public {
-        c = new HypurrBlades("HypurrBlades","Blades",0xC604589f651bfb2515a408bc1C1013dcb707702C,500,0xC604589f651bfb2515a408bc1C1013dcb707702C,200);
+        c = new Launchpad("Test","Test","",address(0),0,address(0),0);
     }
 
     function testBar() public {
