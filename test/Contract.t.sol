@@ -6,10 +6,10 @@ import "forge-std/Test.sol";
 import "src/Contract.sol";
 
 contract TestContract is Test {
-    Contract c;
+    HypurrBlades c;
 
     function setUp() public {
-        c = new Contract();
+        c = new HypurrBlades("HypurrBlades","Blades",0xC604589f651bfb2515a408bc1C1013dcb707702C,500,0xC604589f651bfb2515a408bc1C1013dcb707702C,200);
     }
 
     function testBar() public {

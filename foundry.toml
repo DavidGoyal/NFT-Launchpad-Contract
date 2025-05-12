@@ -1,2 +1,9 @@
 [profile.ci.fuzz]
 runs = 10_000
+
+
+[profile.default]
+optimizer = true
+optimizer_runs = 1000
+via_ir = true
+gas_reports = ["*"]

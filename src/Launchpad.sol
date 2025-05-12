@@ -6,20 +6,21 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {ERC721Pausable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
-import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 
-contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ERC721Royalty,ReentrancyGuard {
+contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard {
 
     error SupplyNotAvailable();
     error InvalidPhase();
     error InvalidPhaseLength();
     error AlreadyAllocated();
     error LastPhaseAlreadyStarted();
+    error InvalidRoyalty();
+    error MaximumQuantityReached();
     error InsufficientPayment();
     error InvalidProof();
     error InvalidTokenID();
@@ -30,7 +31,6 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
     event FundsWithdrawn(address indexed receiver);
 
     uint256 private _nextTokenId;
-    string public baseUri;
 
     address public fundsReceiver;
     uint256 public totalFunds;
@@ -39,11 +39,12 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
     uint256 public maxMintableSupply;
 
     bool public reallocated;
+    string private baseUri;
 
     struct MintPhase {
         uint256 startTime;
         uint256 endTime;
-        uint256 price;
+        uint256 mintPrice;
         uint256 mintableSupply;
         uint256 maxMintPerWallet;
         bytes32 merkleRoot;
@@ -52,6 +53,9 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
     MintPhase[] public mintPhases;
     mapping(uint256 => uint256) public phaseMintedSupply;
     mapping(uint256 => mapping(address => uint256)) public phaseWalletMintedCount;
+
+    address public royaltyReceiver;
+    uint256 public royaltyPercentage;
 
     modifier hasSupply(uint256 phaseIndex, uint256 quantity) {
         MintPhase memory phase = mintPhases[phaseIndex];
@@ -95,22 +99,49 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
         _;
     }
 
+    modifier isValidRoyalty(address receiver, uint256 percentage) {
+         if (percentage > 0) {
+             if (receiver == address(0)) {
+                 revert InvalidRoyalty();
+             }
+ 
+             if (percentage > 10000) {
+                 revert InvalidRoyalty();
+             }
+         }
+         _;
+     }
+
+    modifier isNotMaxQuantity(uint256 quantity){
+        if(quantity > 15){
+            revert MaximumQuantityReached();
+        }
+        _;
+    }
+
     constructor(string memory name, string memory symbol, string memory _baseUri, address _royalityReceiver, uint96 _royalityPercent, address _fundsReceiver, uint256 _maxMintableSupply)
         ERC721(name, symbol)
         Ownable(msg.sender)
+        isValidRoyalty(_royalityReceiver, _royalityPercent)
     {
         if (_fundsReceiver == address(0)) {
             revert InvalidFundsReceiver();
         }
 
-        _setDefaultRoyalty(_royalityReceiver, _royalityPercent); // 5% royalty (500 basis points)
         baseUri=_baseUri;
+        royaltyReceiver = _royalityReceiver;
+        royaltyPercentage = _royalityPercent;
         fundsReceiver=_fundsReceiver;
         maxMintableSupply=_maxMintableSupply;
     }
 
-    function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
-        _setDefaultRoyalty(receiver, feeNumerator);
+    function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner isValidRoyalty(receiver, feeNumerator) {
+        royaltyReceiver = receiver;
+        royaltyPercentage = feeNumerator;    
+    }
+
+    function setBaseURI(string memory _baseUri) external onlyOwner(){
+        baseUri=_baseUri;
     }
 
     function _baseURI() internal view override returns (string memory) {
@@ -139,6 +170,7 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
         external
         payable
         isValidPhase(phaseIndex)
+        isNotMaxQuantity(quantity)
         hasSupply(phaseIndex, quantity) 
         whenNotPaused
         nonReentrant
@@ -159,7 +191,7 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
             revert MintAllowanceExceeded();
         }
 
-        if(msg.value < phase.price * quantity){
+        if(msg.value < phase.mintPrice * quantity){
             revert InsufficientPayment();
         }
 
@@ -168,7 +200,7 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
             _safeMint(msg.sender, tokenId);
         }
 
-        totalFunds += phase.price * quantity;
+        totalFunds += phase.mintPrice * quantity;
         mintedSupply += quantity;
         phaseMintedSupply[phaseIndex] += quantity;
         phaseWalletMintedCount[phaseIndex][msg.sender] += quantity;
@@ -226,11 +258,23 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
         emit FundsWithdrawn(fundsReceiver);
     }
 
+    function normalWithdraw() public onlyOwner nonReentrant {
+        address payable receiver = payable(owner());
+        uint256 amount = address(this).balance;
+
+        (bool success, ) = receiver.call{value: amount}("");
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit FundsWithdrawn(receiver);
+    }
+
     // The following functions are overrides required by Solidity.
 
     function _update(address to, uint256 tokenId, address auth)
         internal
-        override(ERC721, ERC721Enumerable, ERC721Pausable)
+        override(ERC721, ERC721Pausable, ERC721Enumerable)
         returns (address)
     {
         return super._update(to, tokenId, auth);
@@ -256,7 +300,7 @@ contract MyToken is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Bur
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC721Enumerable,ERC721Royalty)
+        override(ERC721, ERC721Enumerable)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
