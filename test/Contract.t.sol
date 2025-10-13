@@ -9,7 +9,7 @@ contract TestContract is Test {
     Launchpad c;
 
     function setUp() public {
-        c = new Launchpad("Test","Test","",address(0),0,address(0),0);
+        c = new Launchpad("Test","Test","",address(0),0);
     }
 
     function testBar() public {

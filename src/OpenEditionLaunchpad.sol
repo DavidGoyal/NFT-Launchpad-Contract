@@ -12,9 +12,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard {
+contract LoomiaOpenEditionMint is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard {
 
     error SupplyNotAvailable();
+    error InvalidRoyalityReceiver();
     error InvalidMintSupply();
     error InvalidPhase();
     error InvalidPhaseLength();
@@ -33,10 +34,11 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
     uint256 private _nextTokenId;
 
     address public fundsReceiver;
+    address public royalityReceiver;
+    uint256 public royalityPercentage;
     uint256 public totalFunds;
 
     uint256 public mintedSupply;
-    uint256 public maxMintableSupply;
 
     string private baseUri;
 
@@ -44,7 +46,6 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
         uint256 startTime;
         uint256 endTime;
         uint256 mintPrice;
-        uint256 mintableSupply;
         uint256 maxMintPerWallet;
         bytes32 merkleRoot;
     }
@@ -52,29 +53,6 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
     MintPhase[] public mintPhases;
     mapping(uint256 => uint256) public phaseMintedSupply;
     mapping(uint256 => mapping(address => uint256)) public phaseWalletMintedCount;
-
-    modifier hasSupply(uint256 phaseIndex, uint256 quantity) {
-        MintPhase memory phase = mintPhases[phaseIndex];
-
-        if(maxMintableSupply==0){
-            revert SupplyNotAvailable();
-        }
-  
-        if (
-            phase.mintableSupply > 0 &&
-            phaseMintedSupply[phaseIndex] + quantity > phase.mintableSupply
-        ) {
-            revert SupplyNotAvailable();
-        }
-  
-        if (
-            maxMintableSupply > 0 &&
-            totalSupply() + quantity > maxMintableSupply
-        ) {
-            revert SupplyNotAvailable();
-        }
-        _;
-    }
 
     modifier isValidPhase(uint256 phaseIndex) {
         if (phaseIndex >= mintPhases.length) {
@@ -106,7 +84,7 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
         _;
     }
 
-    constructor(string memory name, string memory symbol, string memory _baseUri, address _fundsReceiver, uint256 _maxMintableSupply)
+    constructor(string memory name, string memory symbol, string memory _baseUri, address _fundsReceiver, uint256 _royalityPercentage,address _royalityReceiver)
         ERC721(name, symbol)
         Ownable(msg.sender)
     {
@@ -114,24 +92,18 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
             revert InvalidFundsReceiver();
         }
 
-        if (_maxMintableSupply == 0) {
-            revert InvalidMintSupply();
+        if (_royalityReceiver == address(0)) {
+            revert InvalidRoyalityReceiver();
         }
 
         baseUri=_baseUri;
         fundsReceiver=_fundsReceiver;
-        maxMintableSupply=_maxMintableSupply;
+        royalityPercentage=_royalityPercentage;
+        royalityReceiver=_royalityReceiver;
     }
 
     function setBaseURI(string memory _baseUri) external onlyOwner(){
         baseUri=_baseUri;
-    }
-
-    function setMaxMintableSupply(uint256 _maxMintableSupply) external onlyOwner {
-        if (_maxMintableSupply == 0 || _maxMintableSupply < mintedSupply) {
-            revert InvalidMintSupply();
-        }
-        maxMintableSupply = _maxMintableSupply;
     }
 
     function _baseURI() internal view override returns (string memory) {
@@ -150,7 +122,7 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
         delete mintPhases;
 
         for (uint256 i = 0; i < newPhases.length; i++) {
-            if (newPhases[i].startTime > newPhases[i].endTime || newPhases[i].mintableSupply == 0) {
+            if (newPhases[i].startTime > newPhases[i].endTime) {
                 revert InvalidPhase();
             }
             mintPhases.push(newPhases[i]);
@@ -162,7 +134,6 @@ contract Launchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721B
         payable
         isValidPhase(phaseIndex)
         isNotMaxQuantity(quantity)
-        hasSupply(phaseIndex, quantity) 
         whenNotPaused
         nonReentrant
     {

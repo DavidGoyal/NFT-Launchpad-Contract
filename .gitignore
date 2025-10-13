@@ -2,3 +2,6 @@ cache/
 out/
 node_modules/
 .env
+.env.sample
+.DS_Store
+output.json
