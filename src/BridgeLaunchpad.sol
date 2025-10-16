@@ -4,7 +4,6 @@ pragma solidity ^0.8.22;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
-import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {ERC721Pausable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
@@ -12,7 +11,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard,ERC721Royalty {
+contract BridgeLaunchpad is ERC721, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard,ERC721Royalty {
 
     error SupplyNotAvailable();
     error InvalidTokenID();
@@ -61,15 +60,15 @@ contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, E
         supply = _maxMintableSupply;
     }
 
-    function _baseURI() internal view override returns (string memory) {
+    function baseURI() public view returns (string memory) {
         return baseUri;
     }
 
-    function pause() public onlyOwner {
+    function pause() external onlyOwner {
         _pause();
     }
 
-    function unpause() public onlyOwner {
+    function unpause() external onlyOwner {
         _unpause();
     }
 
@@ -77,6 +76,7 @@ contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, E
         external
         payable
         onlyOwner
+        hasSupplyAvailable
         whenNotPaused
         nonReentrant
     {
@@ -88,7 +88,7 @@ contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, E
 
     function _update(address to, uint256 tokenId, address auth)
         internal
-        override(ERC721, ERC721Pausable, ERC721Enumerable)
+        override(ERC721, ERC721Pausable)
         returns (address)
     {
         return super._update(to, tokenId, auth);
@@ -96,7 +96,7 @@ contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, E
 
     function _increaseBalance(address account, uint128 value)
         internal
-        override(ERC721, ERC721Enumerable)
+        override(ERC721)
     {
         super._increaseBalance(account, value);
     }
@@ -108,13 +108,13 @@ contract BridgeLaunchpad is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, E
         override(ERC721)
         returns (string memory)
     {
-        return string(abi.encodePacked(baseUri, "/", Strings.toString(tokenId)));
+        return string(abi.encodePacked(baseUri, "/", Strings.toString(tokenId),".json"));
     }
 
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC721Enumerable,ERC721Royalty)
+        override(ERC721,ERC721Royalty)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
