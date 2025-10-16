@@ -4,7 +4,6 @@ pragma solidity ^0.8.22;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
-import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {ERC721Pausable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
@@ -12,7 +11,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract LoomiaOpenEditionMint is ERC721, ERC721Enumerable, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard {
+contract OpenEditionLaunchpad is ERC721, ERC721Pausable, Ownable, ERC721Burnable,ReentrancyGuard {
 
     error SupplyNotAvailable();
     error InvalidRoyalityReceiver();
@@ -204,7 +203,7 @@ contract LoomiaOpenEditionMint is ERC721, ERC721Enumerable, ERC721Pausable, Owna
 
     function _update(address to, uint256 tokenId, address auth)
         internal
-        override(ERC721, ERC721Pausable, ERC721Enumerable)
+        override(ERC721, ERC721Pausable)
         returns (address)
     {
         return super._update(to, tokenId, auth);
@@ -212,7 +211,7 @@ contract LoomiaOpenEditionMint is ERC721, ERC721Enumerable, ERC721Pausable, Owna
 
     function _increaseBalance(address account, uint128 value)
         internal
-        override(ERC721, ERC721Enumerable)
+        override(ERC721)
     {
         super._increaseBalance(account, value);
     }
@@ -230,7 +229,7 @@ contract LoomiaOpenEditionMint is ERC721, ERC721Enumerable, ERC721Pausable, Owna
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC721Enumerable)
+        override(ERC721)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
